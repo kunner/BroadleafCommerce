@@ -40,6 +40,7 @@ import org.broadleafcommerce.common.presentation.client.PersistencePerspectiveIt
 import org.broadleafcommerce.common.presentation.client.SupportedFieldType;
 import org.broadleafcommerce.common.presentation.client.VisibilityEnum;
 import org.broadleafcommerce.common.util.FormatUtil;
+import org.broadleafcommerce.common.util.ValidationUtil;
 import org.broadleafcommerce.common.util.dao.TQJoin;
 import org.broadleafcommerce.common.util.dao.TQOrder;
 import org.broadleafcommerce.common.util.dao.TQRestriction;
@@ -110,7 +111,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -156,6 +156,9 @@ public class BasicPersistenceModule implements PersistenceModule, RecordHelper, 
 
     @Resource(name = "blBasicPersistenceModuleExtensionManager")
     protected BasicPersistenceModuleExtensionManager extensionManager;
+
+    @Resource(name = "blFetchWrapper")
+    protected FetchWrapper fetchWrapper;
 
     @PostConstruct
     public void init() {
@@ -411,20 +414,8 @@ public class BasicPersistenceModule implements PersistenceModule, RecordHelper, 
                 invalid.setPropertyValidationErrors(entity.getPropertyValidationErrors());
                 invalid.overridePropertyValues(entity);
 
-                StringBuilder sb = new StringBuilder();
-                for (Map.Entry<String, List<String>> entry : invalid.getPropertyValidationErrors().entrySet()) {
-                    Iterator<String> itr = entry.getValue().iterator();
-                    while (itr.hasNext()) {
-                        sb.append(entry.getKey());
-                        sb.append(" : ");
-                        sb.append(itr.next());
-                        if (itr.hasNext()) {
-                            sb.append(" / ");
-                        }
-                    }
-                }
-
-                throw new ValidationException(invalid, "The entity has failed validation - " + sb.toString());
+                String message = ValidationUtil.buildErrorMessage(invalid.getPropertyValidationErrors(), invalid.getGlobalValidationErrors());
+                throw new ValidationException(invalid, message);
             } else if (entityPersistenceException != null) {
                 throw ExceptionHelper.refineException(entityPersistenceException.getCause());
             } else {
@@ -536,6 +527,11 @@ public class BasicPersistenceModule implements PersistenceModule, RecordHelper, 
         }
 
         return entities;
+    }
+
+    @Override
+    public Entity[] getRecords(FetchExtractionRequest fetchExtractionRequest) {
+        return fetchWrapper.getRecords(fetchExtractionRequest);
     }
 
     protected void extractPropertiesFromPersistentEntity(Map<String, FieldMetadata> mergedProperties, Serializable entity, List<Property> props) {
@@ -771,6 +767,11 @@ public class BasicPersistenceModule implements PersistenceModule, RecordHelper, 
         } catch (Exception e) {
             throw new ServiceException("Problem updating entity : " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public String getIdPropertyName(String entityClass) {
+        return persistenceManager.getIdPropertyName(entityClass);
     }
 
     public String getIdPropertyName(Map<String, FieldMetadata> mergedUnfilteredProperties) {
@@ -1145,20 +1146,31 @@ public class BasicPersistenceModule implements PersistenceModule, RecordHelper, 
                 standardFilterMappings.addAll(cto.getNonCountAdditionalFilterMappings());
             }
 
-            List<Serializable> records = getPersistentRecords(persistencePackage.getFetchTypeFullyQualifiedClassname(), standardFilterMappings, cto.getFirstResult(), cto.getMaxResults());
+            FetchRequest fetchRequest = new FetchRequest(persistencePackage, cto,
+                    persistencePackage.getFetchTypeFullyQualifiedClassname(), standardFilterMappings);
+            List<Serializable> records = getPersistentRecords(fetchRequest);
 
             List<FilterMapping> countFilterMappings = new ArrayList<FilterMapping>(filterMappings);
             if (CollectionUtils.isNotEmpty(cto.getAdditionalFilterMappings())) {
                 countFilterMappings.addAll(cto.getAdditionalFilterMappings());
             }
-            totalRecords = getTotalRecords(persistencePackage.getFetchTypeFullyQualifiedClassname(), countFilterMappings);
+            FetchRequest countFetchRequest = new FetchRequest(persistencePackage, cto,
+                    persistencePackage.getFetchTypeFullyQualifiedClassname(), countFilterMappings);
+            totalRecords = getTotalRecords(countFetchRequest);
 
-            payload = getRecords(mergedProperties, records, null, null);
+            FetchExtractionRequest fetchExtractionRequest = new FetchExtractionRequest(persistencePackage, cto,
+                    persistencePackage.getFetchTypeFullyQualifiedClassname(), mergedProperties, records);
+            payload = getRecords(fetchExtractionRequest);
         } catch (Exception e) {
             throw new ServiceException("Unable to fetch results for " + ceilingEntityFullyQualifiedClassname, e);
         }
 
         return new DynamicResultSet(null, payload, totalRecords);
+    }
+
+    @Override
+    public Integer getTotalRecords(FetchRequest fetchRequest) {
+        return fetchWrapper.getTotalRecords(fetchRequest);
     }
 
     @Override
@@ -1176,6 +1188,11 @@ public class BasicPersistenceModule implements PersistenceModule, RecordHelper, 
     public Serializable getMaxValue(String ceilingEntity, List<FilterMapping> filterMappings, String maxField) {
         return criteriaTranslator.translateMaxQuery(persistenceManager.getDynamicEntityDao(),
                 ceilingEntity, filterMappings, maxField).getSingleResult();
+    }
+
+    @Override
+    public List<Serializable> getPersistentRecords(FetchRequest fetchRequest) {
+        return fetchWrapper.getPersistentRecords(fetchRequest);
     }
 
     @Override

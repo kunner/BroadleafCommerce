@@ -64,9 +64,8 @@ import javax.persistence.Table;
 @Entity
 @Inheritance(strategy = InheritanceType.JOINED)
 @Table(name = "BLC_SITE")
-@Cache(usage= CacheConcurrencyStrategy.NONSTRICT_READ_WRITE, region="blStandardElements")
+@Cache(usage= CacheConcurrencyStrategy.NONSTRICT_READ_WRITE, region="blSiteElements")
 @AdminPresentationClass(friendlyName = "baseSite")
-@SQLDelete(sql="UPDATE BLC_SITE SET ARCHIVED = 'Y' WHERE SITE_ID = ?")
 @DirectCopyTransform({
         @DirectCopyTransformMember(templateTokens = DirectCopyTransformTypes.MULTITENANT_SITEMARKER)
 })
@@ -115,7 +114,7 @@ public class SiteImpl implements Site, AdminMainEntity {
     @ManyToMany(targetEntity = CatalogImpl.class, cascade = {CascadeType.PERSIST, CascadeType.DETACH, CascadeType.MERGE, CascadeType.REFRESH})
     @JoinTable(name = "BLC_SITE_CATALOG", joinColumns = @JoinColumn(name = "SITE_ID"), inverseJoinColumns = @JoinColumn(name = "CATALOG_ID"))
     @BatchSize(size = 50)
-    @Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region="blStandardElements")
+    @Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region="blSiteElements")
     @AdminPresentation(excluded = true)
     protected List<Catalog> catalogs = new ArrayList<Catalog>();
 
@@ -270,12 +269,19 @@ public class SiteImpl implements Site, AdminMainEntity {
             clone.setSiteIdentifierValue(getSiteIdentifierValue());
             ((Status) clone).setArchived(getArchived());
 
-            for (Catalog catalog : getCatalogs()) {
-                Catalog cloneCatalog = new CatalogImpl();
-
-                cloneCatalog.setId(catalog.getId());
-                cloneCatalog.setName(catalog.getName());
-                clone.getCatalogs().add(cloneCatalog);
+            if (getCatalogs() != null) {
+                for (Catalog catalog : getCatalogs()) {
+                    if (catalog != null) {
+                        Catalog cloneCatalog = catalog.clone();
+                        if (clone.getCatalogs() != null) {
+                            clone.getCatalogs().add(cloneCatalog);
+                        } else {
+                            List<Catalog> cloneCatalogs = new ArrayList<Catalog>();
+                            cloneCatalogs.add(cloneCatalog);
+                            clone.setCatalogs(cloneCatalogs);
+                        }
+                    }
+                }
             }
 
         } catch (Exception e) {

@@ -20,6 +20,7 @@
 package org.broadleafcommerce.common.i18n.dao;
 
 import org.apache.commons.beanutils.PropertyUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.broadleafcommerce.common.extension.ExtensionResultHolder;
 import org.broadleafcommerce.common.extension.ResultType;
 import org.broadleafcommerce.common.extension.StandardCacheItem;
@@ -183,11 +184,14 @@ public class TranslationDaoImpl implements TranslationDao {
         try {
             if (extensionManager != null) {
                 extensionManager.getProxy().setup(TranslationImpl.class, stage);
-                extensionManager.getProxy().refineRetrieve(TranslationImpl.class, stage, builder, criteria, root, restrictions);
+                extensionManager.getProxy().refineParameterRetrieve(TranslationImpl.class, stage, builder, criteria, root, restrictions);
             }
             criteria.where(restrictions.toArray(new Predicate[restrictions.size()]));
 
             TypedQuery<Long> query = em.createQuery(criteria);
+            if (extensionManager != null) {
+                extensionManager.getProxy().refineQuery(TranslationImpl.class, stage, query);
+            }
             query.setHint(QueryHints.HINT_CACHEABLE, true);
             return query.getSingleResult();
         } finally {
@@ -199,20 +203,30 @@ public class TranslationDaoImpl implements TranslationDao {
 
     @Override
     public List<Translation> readAllTranslationEntries(TranslatedEntity entityType, ResultType stage) {
+        return readAllTranslationEntries(entityType, stage, null);
+    }
+    
+    public List<Translation> readAllTranslationEntries(TranslatedEntity entityType, ResultType stage, List<String> entityIds) {
         CriteriaBuilder builder = em.getCriteriaBuilder();
         CriteriaQuery<Translation> criteria = builder.createQuery(Translation.class);
         Root<TranslationImpl> root = criteria.from(TranslationImpl.class);
         criteria.select(root);
         List<Predicate> restrictions = new ArrayList<Predicate>();
         restrictions.add(builder.equal(root.get("entityType"), entityType.getFriendlyType()));
+        if (CollectionUtils.isNotEmpty(entityIds)) {
+            restrictions.add(root.get("entityId").in(entityIds));
+        }
         try {
             if (extensionManager != null) {
                 extensionManager.getProxy().setup(TranslationImpl.class, stage);
-                extensionManager.getProxy().refineRetrieve(TranslationImpl.class, stage, builder, criteria, root, restrictions);
+                extensionManager.getProxy().refineParameterRetrieve(TranslationImpl.class, stage, builder, criteria, root, restrictions);
             }
             criteria.where(restrictions.toArray(new Predicate[restrictions.size()]));
 
             TypedQuery<Translation> query = em.createQuery(criteria);
+            if (extensionManager != null) {
+                extensionManager.getProxy().refineQuery(TranslationImpl.class, stage, query);
+            }
             query.setHint(QueryHints.HINT_CACHEABLE, true);
             return query.getResultList();
         } finally {
@@ -247,16 +261,23 @@ public class TranslationDaoImpl implements TranslationDao {
         try {
             if (extensionManager != null) {
                 extensionManager.getProxy().setup(TranslationImpl.class, stage);
-                extensionManager.getProxy().refineRetrieve(TranslationImpl.class, stage, builder, criteria, root, restrictions);
+                extensionManager.getProxy().refineParameterRetrieve(TranslationImpl.class, stage, builder, criteria, root, restrictions);
             }
             criteria.where(restrictions.toArray(new Predicate[restrictions.size()]));
 
             TypedQuery<Translation> query = em.createQuery(criteria);
+            if (extensionManager != null) {
+                extensionManager.getProxy().refineQuery(TranslationImpl.class, stage, query);
+            }
             query.setHint(QueryHints.HINT_CACHEABLE, true);
             List<Translation> translations = query.getResultList();
 
             if (!translations.isEmpty()) {
-                return findBestTranslation(localeCountryCode, translations);
+                if (!localeCode.equals(localeCountryCode)) {
+                    return findBestTranslation(localeCountryCode, translations);
+                } else {
+                    return findSpecificTranslation(localeCountryCode, translations);
+                }
             } else {
                 return null;
             }
@@ -291,6 +312,15 @@ public class TranslationDaoImpl implements TranslationDao {
             }
         }
         return translations.get(0);
+    }
+
+    protected Translation findSpecificTranslation(String localeCountryCode, List<Translation> translations) {
+        for (Translation translation : translations) {
+            if (translation.getLocaleCode().equals(localeCountryCode)) {
+                return translation;
+            }
+        }
+        return null;
     }
 
     public DynamicDaoHelper getDynamicDaoHelper() {

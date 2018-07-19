@@ -279,7 +279,7 @@ public class SkuImpl implements Sku {
             @ValidationConfiguration(
                 validationImplementation = "blAfterStartDateValidator",
                 configurationItems = {
-                        @ConfigurationItem(itemName = "otherField", itemValue = "defaultSku.activeStartDate")
+                        @ConfigurationItem(itemName = "otherField", itemValue = "activeStartDate")
                 }) 
         })
     protected Date activeEndDate;
@@ -553,11 +553,7 @@ public class SkuImpl implements Sku {
 
     @Override
     public Money getRetailPrice() {
-        Money tmpRetailPrice = getRetailPriceInternal();
-        if (tmpRetailPrice == null) {
-            throw new IllegalStateException("Retail price on Sku with id " + getId() + " was null");
-        }
-        return tmpRetailPrice;
+        return getRetailPriceInternal();
     }
 
     /*
@@ -907,6 +903,11 @@ public class SkuImpl implements Sku {
     }
 
     @Override
+    public Map<String, SkuMediaXref> getSkuMediaXrefIgnoreDefaultSku() {
+        return skuMedia;
+    }
+
+    @Override
     public void setSkuMediaXref(Map<String, SkuMediaXref> skuMediaXref) {
         this.skuMedia = skuMediaXref;
     }
@@ -1230,7 +1231,7 @@ public class SkuImpl implements Sku {
         }
         for(Map.Entry<String, SkuMediaXref> entry : skuMedia.entrySet()){
             SkuMediaXrefImpl clonedEntry = ((SkuMediaXrefImpl)entry.getValue()).createOrRetrieveCopyInstance(context).getClone();
-            cloned.getSkuMediaXref().put(entry.getKey(),clonedEntry);
+            cloned.getSkuMediaXrefIgnoreDefaultSku().put(entry.getKey(),clonedEntry);
         }
         for(FulfillmentOption entry : excludedFulfillmentOptions){
             FulfillmentOption clonedEntry = entry.createOrRetrieveCopyInstance(context).getClone();

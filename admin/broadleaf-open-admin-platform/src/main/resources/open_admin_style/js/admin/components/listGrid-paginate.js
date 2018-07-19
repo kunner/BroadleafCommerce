@@ -65,6 +65,26 @@
         getTotalRecords : function($tbody) {
             return $tbody.data('totalrecords');
         },
+
+        getFirstId : function($tbody) {
+            return $tbody.data('firstid');
+        },
+
+        getLastId : function($tbody) {
+            return $tbody.data('lastid');
+        },
+
+        getUpperCount : function($tbody) {
+            return $tbody.data('uppercount');
+        },
+
+        getLowerCount : function($tbody) {
+            return $tbody.data('lowercount');
+        },
+
+        getTotalCountLessThanPageSize : function($tbody) {
+            return $tbody.data('lessthanpagesize');
+        },
         
         getRange : function(rangeDescription) {
             var range = rangeDescription.split('-');
@@ -367,52 +387,57 @@
                     }
                 }
             }
-            
             if (startIndex != null && maxIndex != null) {
-                var delta;
-                if (startIndex <= topIndex && maxIndex <= botIndex) {
-                    // Top range missing - show in the middle of the top and max
-                    delta = (topIndex + maxIndex) / 2;
-                } else if (startIndex > topIndex && maxIndex < botIndex) {
-                    // Mid range missing - show in the middle of the start and max
-                    delta = (startIndex + maxIndex) / 2;
-                } else if (startIndex > topIndex && maxIndex >= botIndex) {
-                    // Bottom range missing - show in the middle of the start and bot
-                    delta = (startIndex + botIndex) / 2;
-                } else {
-                    // Full range missing - show in the middle of the top and bot
-                    delta = (topIndex + botIndex) / 2;
-                }
-                delta = delta - topIndex;
-                spinnerOffset = $tbody.closest('.mCustomScrollBox').position().top + 3 + (this.getRowHeight($tbody) * delta);
-                BLCAdmin.listGrid.showLoadingSpinner($tbody, spinnerOffset);
-                
-                var url = BLCAdmin.history.getUrlWithParameter('startIndex', startIndex, null, baseUrl);
-                url = BLCAdmin.history.getUrlWithParameter('maxIndex', maxIndex, null, url);
-                
-                var params = $tbody.closest('.listgrid-container').find('.listgrid-header-wrapper table').data('currentparams');
-                for (var param in params) {
-                    url = BLCAdmin.history.getUrlWithParameter(param, params[param], null, url);
-                }
-                
-                //console.log('Loading more records -- ' + url);
-                
-                BLC.ajax({ url: url, type: 'GET' }, function(data) {
-                    var $newTbody = data.find('tbody');
-                    BLCAdmin.listGrid.paginate.injectRecords($tbody, $newTbody);
-                    BLCAdmin.listGrid.paginate.releaseLock();
-                    
-                    // now that I've loaded records, see if I need to do it again
-                    var topIndex = BLCAdmin.listGrid.paginate.getTopVisibleIndex($tbody);
-                    var topIndexLoaded = BLCAdmin.listGrid.paginate.isIndexLoaded($tbody, topIndex);
-                    var botIndex = BLCAdmin.listGrid.paginate.getBottomVisibleIndex($tbody);
-                    var botIndexLoaded = BLCAdmin.listGrid.paginate.isIndexLoaded($tbody, botIndex);
-                    if (!botIndexLoaded || !topIndexLoaded) {
-                        BLCAdmin.listGrid.paginate.loadRecords($tbody, baseUrl);
+                // If we find that the start index is greater than the max index, we do not
+                // need to gather any further records, so don't make an ajax call. We also do not
+                // want to show the spinner as nothing needs to be done in the first place.
+                if (startIndex <= maxIndex) {
+                    var delta;
+                    if (startIndex <= topIndex && maxIndex <= botIndex) {
+                        // Top range missing - show in the middle of the top and max
+                        delta = (topIndex + maxIndex) / 2;
+                    } else if (startIndex > topIndex && maxIndex < botIndex) {
+                        // Mid range missing - show in the middle of the start and max
+                        delta = (startIndex + maxIndex) / 2;
+                    } else if (startIndex > topIndex && maxIndex >= botIndex) {
+                        // Bottom range missing - show in the middle of the start and bot
+                        delta = (startIndex + botIndex) / 2;
                     } else {
-                        BLCAdmin.listGrid.hideLoadingSpinner($tbody);
+                        // Full range missing - show in the middle of the top and bot
+                        delta = (topIndex + botIndex) / 2;
                     }
-                });
+                    delta = delta - topIndex;
+                    spinnerOffset = $tbody.closest('.mCustomScrollBox').position().top + 3 + (this.getRowHeight($tbody) * delta);
+                    
+                
+                    BLCAdmin.listGrid.showLoadingSpinner($tbody, spinnerOffset);
+    
+                    var params =  BLCAdmin.history.getUrlParameters();
+                    for (var param in params) {
+                        baseUrl = BLCAdmin.history.getUrlWithParameter(param, params[param], null, baseUrl);
+                    }
+    
+                    var url = BLCAdmin.history.getUrlWithParameter('startIndex', startIndex, null, baseUrl);
+                    url = BLCAdmin.history.getUrlWithParameter('maxIndex', maxIndex, null, url);
+                    
+                    //console.log('Loading more records -- ' + url);
+                    BLC.ajax({ url: url, type: 'GET' }, function(data) {
+                        var $newTbody = data.find('tbody');
+                        BLCAdmin.listGrid.paginate.injectRecords($tbody, $newTbody);
+                        BLCAdmin.listGrid.paginate.releaseLock();
+                        
+                        // now that I've loaded records, see if I need to do it again
+                        var topIndex = BLCAdmin.listGrid.paginate.getTopVisibleIndex($tbody);
+                        var topIndexLoaded = BLCAdmin.listGrid.paginate.isIndexLoaded($tbody, topIndex);
+                        var botIndex = BLCAdmin.listGrid.paginate.getBottomVisibleIndex($tbody);
+                        var botIndexLoaded = BLCAdmin.listGrid.paginate.isIndexLoaded($tbody, botIndex);
+                        if (!botIndexLoaded || !topIndexLoaded) {
+                            BLCAdmin.listGrid.paginate.loadRecords($tbody, baseUrl);
+                        } else {
+                            BLCAdmin.listGrid.hideLoadingSpinner($tbody);
+                        }
+                    });
+                }
             } else {
                 BLCAdmin.listGrid.paginate.releaseLock();
             }
@@ -423,7 +448,10 @@
         // ************************* *
         
         getRowHeight : function($tbody) {
-            return $tbody.find('tr:not(.blank-padding):first').height();
+            // Updated the code here to return the exact value (possibly float values) of
+            // the height of the row. Previously it would round this value which led to
+            // inaccurate math.
+            return $tbody.find('tr:not(.blank-padding):first')[0].getBoundingClientRect().height;
         },
         
         getTopVisibleIndex : function($tbody) {
@@ -440,7 +468,10 @@
         getBottomVisibleIndex : function($tbody) {
             var scrollOffset = $tbody.closest('.mCSB_container').position().top;
             var trHeight = this.getRowHeight($tbody);
-            var bottomVisibleIndex = Math.floor((scrollOffset * -1 + $tbody.closest('.listgrid-body-wrapper').height() - 4) / trHeight);
+            // Updated the code here to use the exact value (possibly float value) of
+            // the listgrid body wrapper. Previously it would round this value which
+            // led to inaccurate math.
+            var bottomVisibleIndex = Math.floor((scrollOffset * -1 + $tbody.closest('.listgrid-body-wrapper')[0].getBoundingClientRect().height - trHeight) / trHeight);
             return bottomVisibleIndex;
         },
         
@@ -454,11 +485,55 @@
             var topIndex = this.getTopVisibleIndex($tbody) + 1;
             var botIndex = this.getBottomVisibleIndex($tbody) + 1;
             var totalRecords = this.getTotalRecords($tbody);
+            var pageSize = this.getPageSize($tbody);
+            var lowerCount = this.getLowerCount($tbody);
+            var upperCount = this.getUpperCount($tbody);
+            var totalCountLessThanPageSize = this.getTotalCountLessThanPageSize($tbody);
             var $footer = $tbody.closest('.listgrid-container').find('.listgrid-table-footer');
             
             $footer.find('.low-index').text(topIndex);
             $footer.find('.high-index').text(botIndex);
             $footer.find('.total-records').text(totalRecords);
+            if (upperCount - totalRecords > 1) {
+                $footer.find('.previous-page').css('visibility', 'visible');
+            } else {
+                $footer.find('.previous-page').css('visibility', 'hidden');
+            }
+            if (totalRecords >= pageSize || (!totalCountLessThanPageSize && totalRecords - upperCount === 0)) {
+                $footer.find('.next-page').css('visibility', 'visible');
+            } else {
+                $footer.find('.next-page').css('visibility', 'hidden');
+            }
+            $footer.find('.first-index').text(lowerCount);
+            $footer.find('.last-index').text(upperCount);
+
+            //expose either the paging control or the standard scroll counter
+            var $header = $tbody.closest('div.listgrid-body-wrapper').siblings('div.listgrid-header-wrapper');
+            var $headerTable = $header.find("table");
+            var params = BLCAdmin.history.getUrlParameters();
+            if (!params) {
+                params = $headerTable.data('currentparams');
+            }
+            var foundFilterOrSort = false;
+            if (params) {
+                $.each(params, function(key, value) {
+                    var $criteriaInput = $header.find("input[data-name='" + key + "']");
+                    if (!$criteriaInput || $criteriaInput.length <= 0) {
+                        $criteriaInput = $header.find("select[data-name='" + key + "']");
+                    }
+                    if ($criteriaInput && $criteriaInput.length > 0) {
+                        foundFilterOrSort = true;
+                    }
+                });
+            }
+            var fetchType = $headerTable.data("fetchtype");
+            if (!foundFilterOrSort && fetchType === 'LARGERESULTSET') {
+                $footer.find('.page-results').css('display', 'inline');
+                $footer.find('.scroll-results').css('display', 'none');
+            } else {
+                $footer.find('.page-results').css('display', 'none');
+                $footer.find('.scroll-results').css('display', 'inline');
+            }
         },
         
         updateGridSize : function($tbody) {
@@ -677,14 +752,7 @@
                         
                         // Fetch records if necessary
                         $.doTimeout('fetch', fetchDebounce, function() {
-                            if (singleGrid) {
-                                var url = null;
-                            } else if (isAssetGrid) {
-                                var url = $tbody.closest('table').data('currenturl');
-                            } else {
-                                var url = $tbody.closest('table').data('path');
-                            }
-                            
+                        	var url = $tbody.closest('table').data('path');
                             BLCAdmin.listGrid.paginate.loadRecords($tbody, url);
                         });
                         
@@ -751,6 +819,73 @@ $(document).ready(function() {
             });
         });
     });
-    
+
+    $('body').on('click', 'a.previous-page', function(event) {
+        var $pageLink = $(this);
+        var $parentSpan = $pageLink.closest('span.listgrid-table-footer');
+        var $headerWrapper = $parentSpan.siblings('div.listgrid-header-wrapper');
+        var $bodyWrapper = $parentSpan.siblings('div.listgrid-body-wrapper');
+        var $tbody = $bodyWrapper.find('table.list-grid-table').find('tbody');
+        var currentUrl = $tbody.closest('table').data('path');
+        if (BLCAdmin.listGrid.isLoading($tbody)) {
+            return false;
+        }
+        var firstId = BLCAdmin.listGrid.paginate.getFirstId($tbody);
+        currentUrl = BLCAdmin.history.getUrlWithParameter('firstId', firstId, null, currentUrl);
+        var lowerCount = BLCAdmin.listGrid.paginate.getLowerCount($tbody);
+        var upperCount = BLCAdmin.listGrid.paginate.getUpperCount($tbody);
+        currentUrl = BLCAdmin.history.getUrlWithParameter('upperCount', upperCount, null, currentUrl);
+        currentUrl = BLCAdmin.history.getUrlWithParameter('lowerCount', lowerCount, null, currentUrl);
+        var pageSize = $tbody.closest('.listgrid-container').find('.listgrid-table-footer').find('.result-page-size-input').val();
+        currentUrl = BLCAdmin.history.getUrlWithParameter('pageSize', pageSize, null, currentUrl);
+        var spinnerOffset = $tbody.closest('.mCustomScrollBox').position().top + 3 + (BLCAdmin.listGrid.paginate.getRowHeight($tbody));
+        BLCAdmin.listGrid.showLoadingSpinner($tbody, spinnerOffset);
+        BLC.ajax({
+            url: currentUrl,
+            type: "GET"
+        }, function(data) {
+            BLCAdmin.listGrid.hideLoadingSpinner($tbody);
+            BLCAdmin.listGrid.replaceRelatedListGrid($(data), null, { isRefresh : false});
+        });
+        return false;
+    });
+
+    $('body').on('click', 'a.next-page', function(event) {
+        var $pageLink = $(this);
+        var $parentSpan = $pageLink.closest('span.listgrid-table-footer');
+        var $headerWrapper = $parentSpan.siblings('div.listgrid-header-wrapper');
+        var $bodyWrapper = $parentSpan.siblings('div.listgrid-body-wrapper');
+        var $tbody = $bodyWrapper.find('table.list-grid-table').find('tbody');
+        var currentUrl = $tbody.closest('table').data('path');
+        if (BLCAdmin.listGrid.isLoading($tbody)) {
+            return false;
+        }
+        var lastId = BLCAdmin.listGrid.paginate.getLastId($tbody);
+        currentUrl = BLCAdmin.history.getUrlWithParameter('lastId', lastId, null, currentUrl);
+        var lowerCount = BLCAdmin.listGrid.paginate.getLowerCount($tbody);
+        var upperCount = BLCAdmin.listGrid.paginate.getUpperCount($tbody);
+        currentUrl = BLCAdmin.history.getUrlWithParameter('upperCount', upperCount, null, currentUrl);
+        currentUrl = BLCAdmin.history.getUrlWithParameter('lowerCount', lowerCount, null, currentUrl);
+        var pageSize = $tbody.closest('.listgrid-container').find('.listgrid-table-footer').find('.result-page-size-input').val();
+        currentUrl = BLCAdmin.history.getUrlWithParameter('pageSize', pageSize, null, currentUrl);
+        var spinnerOffset = $tbody.closest('.mCustomScrollBox').position().top + 3 + (BLCAdmin.listGrid.paginate.getRowHeight($tbody));
+        BLCAdmin.listGrid.showLoadingSpinner($tbody, spinnerOffset);
+        BLC.ajax({
+            url: currentUrl,
+            type: "GET"
+        }, function(data) {
+            BLCAdmin.listGrid.hideLoadingSpinner($tbody);
+            var $newTBody = $(data).find('tbody');
+            var totalRecords = BLCAdmin.listGrid.paginate.getTotalRecords($newTBody);
+            var $footer = $tbody.closest('.listgrid-container').find('.listgrid-table-footer');
+            if (totalRecords === 0) {
+                $footer.find('.next-page').css('visibility', 'hidden');
+            } else {
+                $footer.find('.next-page').css('visibility', 'visible');
+                BLCAdmin.listGrid.replaceRelatedListGrid($(data), null, { isRefresh : false});
+            }
+        });
+        return false;
+    });
 });
 

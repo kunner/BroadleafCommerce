@@ -33,6 +33,7 @@ import org.broadleafcommerce.core.catalog.domain.ProductOption;
 import org.broadleafcommerce.core.catalog.domain.ProductOptionValue;
 import org.broadleafcommerce.core.catalog.domain.Sku;
 import org.broadleafcommerce.core.catalog.domain.SkuFee;
+import org.broadleafcommerce.core.catalog.domain.dto.AssignedProductOptionDTO;
 import org.broadleafcommerce.core.catalog.service.type.ProductType;
 import org.broadleafcommerce.core.search.domain.SearchCriteria;
 import org.springframework.stereotype.Service;
@@ -412,5 +413,25 @@ public class CatalogServiceImpl implements CatalogService {
             return skus.get(0);
         }
     }
-    
+
+    @Override
+    public List<AssignedProductOptionDTO> findAssignedProductOptionsByProductId(Long productId) {
+        return productOptionDao.findAssignedProductOptionsByProductId(productId);
+    }
+
+    @Override
+    public List<AssignedProductOptionDTO> findAssignedProductOptionsByProduct(Product product) {
+        return productOptionDao.findAssignedProductOptionsByProduct(product);
+    }
+
+    @Override
+    public Long countProductsUsingProductOptionById(Long productOptionId) {
+        return productOptionDao.countProductsUsingProductOptionById(productOptionId);
+    }
+
+    @Override
+    public List<Long> findProductIdsUsingProductOptionById(Long productId, int start, int pageSize) {
+        return productOptionDao.findProductIdsUsingProductOptionById(productId, start, pageSize);
+    }
+
 }

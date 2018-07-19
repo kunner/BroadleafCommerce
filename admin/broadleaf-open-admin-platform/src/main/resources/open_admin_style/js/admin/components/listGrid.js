@@ -208,6 +208,11 @@
             var $spinner = $tbody.closest('.listgrid-container').find('i.listgrid-table-spinner');
             $spinner.parent().css('display', 'none');
         },
+
+        isLoading : function($tbody) {
+            var $spinner = $tbody.closest('.listgrid-container').find('i.listgrid-table-spinner');
+            return $spinner.parent().css('display') === 'block';
+        },
         
         initialize : function($container) {
             BLCAdmin.listGrid.updateToolbarRowActionButtons($container);
@@ -380,7 +385,7 @@ $(document).ready(function() {
             
             var displayValue = fields[displayValueProp];
             var $selectedRow = BLCAdmin.currentModal().find('tr[data-link="' + link + '"]');
-            var $displayField = $selectedRow.find('td[data-fieldname=' + displayValueProp + ']');
+            var $displayField = $selectedRow.find('td[data-fieldname=' + displayValueProp.split(".").join("\\.") + ']');
             if ($displayField.hasClass('derived')) {
                 displayValue = $.trim($displayField.text());
             }

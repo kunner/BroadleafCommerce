@@ -39,6 +39,7 @@
         // Modal messages
         error : 'Error',
         forbidden403 : '403 Forbidden',
+        staleContent : '409 The request could not be completed due to a conflict with the current state of the target resource, likely due to stale state. Please Refresh.',
         errorOccurred : 'An error occurred',
         loading : 'Loading',
         
@@ -48,6 +49,7 @@
 
         problemSaving : 'There was a problem saving. See errors below',
         problemDeleting : 'There was a problem deleting this record. See errors below',
+        problemReverting : 'There was a problem reverting this record.',
         globalErrors : 'Global Errors'
 
     };

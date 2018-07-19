@@ -26,6 +26,7 @@ import org.broadleafcommerce.core.catalog.domain.ProductOption;
 import org.broadleafcommerce.core.catalog.domain.ProductOptionValue;
 import org.broadleafcommerce.core.catalog.domain.Sku;
 import org.broadleafcommerce.core.catalog.domain.SkuFee;
+import org.broadleafcommerce.core.catalog.domain.dto.AssignedProductOptionDTO;
 import org.broadleafcommerce.core.catalog.service.type.ProductType;
 import org.broadleafcommerce.core.search.domain.SearchCriteria;
 
@@ -263,5 +264,35 @@ public interface CatalogService {
      * @return
      */    
     public Sku findSkuByURI(String uri);
+
+    /**
+     * Returns a list of {@link org.broadleafcommerce.core.catalog.domain.dto.AssignedProductOptionDTO}
+     * found for given the productId.
+     *
+     * @param productId
+     * @return
+     */
+    public List<AssignedProductOptionDTO> findAssignedProductOptionsByProductId(Long productId);
+
+    /**
+     * Returns a list of {@link org.broadleafcommerce.core.catalog.domain.dto.AssignedProductOptionDTO}
+     * found for given the {@link org.broadleafcommerce.core.catalog.domain.Product}.
+     *
+     * @param product
+     * @return
+     */
+    public List<AssignedProductOptionDTO> findAssignedProductOptionsByProduct(Product product);
+
+    public Long countProductsUsingProductOptionById(Long productOptionId);
+
+    /**
+     * Returns a paginated list of Product Ids that are using the passed in ProductOption ID
+     *
+     * @param productOptionId
+     * @param start
+     * @param pageSize
+     * @return
+     */
+    public List<Long> findProductIdsUsingProductOptionById(Long productOptionId, int start, int pageSize);
 
 }

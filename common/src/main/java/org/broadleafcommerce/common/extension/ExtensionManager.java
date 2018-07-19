@@ -75,15 +75,21 @@ public abstract class ExtensionManager<T extends ExtensionHandler> implements In
      * @return a list of handlers sorted by their priority
      * @see {@link #registerHandler(ExtensionHandler)}
      */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     public List<T> getHandlers() {
-        synchronized (LOCK_OBJECT) {
-            if (!handlersSorted) {
-                Comparator fieldCompare = new BeanComparator("priority");
-                Collections.sort(handlers, fieldCompare);
-                handlersSorted = true;
+        if (!handlersSorted) {
+            synchronized (LOCK_OBJECT) {
+                sortHandlers();
             }
-            return handlers;
+        }
+        return handlers;
+    }
+
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    protected void sortHandlers() {
+        if (!handlersSorted) {
+            Comparator fieldCompare = new BeanComparator("priority");
+            Collections.sort(handlers, fieldCompare);
+            handlersSorted = true;
         }
     }
     
@@ -184,5 +190,33 @@ public abstract class ExtensionManager<T extends ExtensionHandler> implements In
             return ExtensionResultStatusType.HANDLED;
         }
     }
-       
+
+    /**
+     * Provides a mechanism for executing multiple extension handler touchpoints without utilizing reflection. This is a reasonable
+     * alternative when the ExtensionManager is used in an operation that is very sensitive to the time cost involved in reflection
+     * (e.g. an operation that has a high volume of calls)
+     *
+     * @param operation
+     * @param params
+     * @return
+     */
+    protected ExtensionResultStatusType execute(ExtensionManagerOperation operation, Object... params) {
+        boolean notHandled = true;
+        for (ExtensionHandler handler : getHandlers()) {
+            if (handler.isEnabled()) {
+                ExtensionResultStatusType result = operation.execute(handler, params);
+                if (!ExtensionResultStatusType.NOT_HANDLED.equals(result)) {
+                    notHandled = false;
+                }
+                if (!shouldContinue(result, handler, null, null)) {
+                    break;
+                }
+            }
+        }
+        if (notHandled) {
+            return ExtensionResultStatusType.NOT_HANDLED;
+        } else {
+            return ExtensionResultStatusType.HANDLED;
+        }
+    }
 }

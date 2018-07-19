@@ -46,6 +46,8 @@
                 <ref bean="blISOCountryPersistenceHandler"/>
                 <ref bean="blSkuBundleItemCustomPersistenceHandler" />
                 <ref bean="blSearchFacetRangeCustomPersistenceHandler" />
+                <ref bean="blProductOptionsCustomPersistenceHandler" />
+                <ref bean="blProductOptionValuesCustomPersistenceHandler" />
             </list>
         </property>
     </bean>

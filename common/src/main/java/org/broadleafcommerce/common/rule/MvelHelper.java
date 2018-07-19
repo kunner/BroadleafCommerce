@@ -19,6 +19,7 @@
  */
 package org.broadleafcommerce.common.rule;
 
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.broadleafcommerce.common.RequestDTO;
@@ -36,6 +37,7 @@ import java.math.BigDecimal;
 import java.text.ParseException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -61,7 +63,11 @@ public class MvelHelper {
     public static final String BLC_RULE_MAP_PARAM = "blRuleMap";
 
     // The following attribute is set in BroadleafProcessURLFilter
-    public static final String REQUEST_DTO = "blRequestDTO";    
+    public static final String REQUEST_DTO = "blRequestDTO";
+
+    static {
+        System.setProperty("mvel2.disable.jit", "true");
+    }
 
     /**
      * Converts a field to the specified type.    Useful when 
@@ -122,17 +128,41 @@ public class MvelHelper {
      */
     public static boolean evaluateRule(String rule, Map<String, Object> ruleParameters,
             Map<String, Serializable> expressionCache) {
+        return evaluateRule(rule, ruleParameters, expressionCache, null);
+    }
+    
+    /**
+     * @param rule
+     * @param ruleParameters
+     * @param expressionCache
+     * @param additionalContextImports additional imports to give to the {@link ParserContext} besides "MVEL" ({@link MVEL} and
+     * "MvelHelper" ({@link MvelHelper}) since they are automatically added 
+     * @return
+     */
+    public static boolean evaluateRule(String rule, Map<String, Object> ruleParameters,
+        Map<String, Serializable> expressionCache, Map<String, Class<?>> additionalContextImports) {
+        
         // Null or empty is a match
         if (rule == null || "".equals(rule)) {
             return true;
         } else {
             // MVEL expression compiling can be expensive so let's cache the expression
-            Serializable exp = (Serializable) expressionCache.get(rule);
+            Serializable exp = null;
+            if (expressionCache != null) {
+                exp = expressionCache.get(rule);
+            }
             if (exp == null) {
                 ParserContext context = new ParserContext();
                 context.addImport("MVEL", MVEL.class);
                 context.addImport("MvelHelper", MvelHelper.class);
-                exp = MVEL.compileExpression(rule, context);
+                if (MapUtils.isNotEmpty(additionalContextImports)) {
+                    for (Entry<String, Class<?>> entry : additionalContextImports.entrySet()) {
+                        context.addImport(entry.getKey(), entry.getValue());
+                    }
+                }
+                
+                String modifiedRule = modifyExpression(rule, ruleParameters, context);
+                exp = MVEL.compileExpression(modifiedRule, context);
                 expressionCache.put(rule, exp);
             }
 
@@ -154,12 +184,55 @@ public class MvelHelper {
             } catch (Exception e) {
                 //Unable to execute the MVEL expression for some reason
                 //Return false, but notify about the bad expression through logs
-                if (!TEST_MODE) {
+                if (!TEST_MODE && LOG.isInfoEnabled()) {
                     LOG.info("Unable to parse and/or execute the mvel expression (" + rule + "). Reporting to the logs and returning false for the match expression", e);
                 }
                 return false;
             }
         }
+    }
+    
+    /**
+     * <p>
+     * Provides a hook point to modify the final expression before it's built. By default, this looks for attribute
+     * maps and replaces them such that it does string comparison.
+     * 
+     * <p>
+     * For example, given an expression like getProductAttributes()['somekey'] == 'someval', getProductAttributes()['somekey']
+     * actually returns a ProductAttribute object, not a String, so the comparison is wrong. Instead, we actually want
+     * to do this: getProductAttributes().?get('somekey').?value == 'someval'. This function performs that replacement
+     *
+     * <p>
+     * The modification regex will support both simple and complex expressions like:
+     * "(MvelHelper.convertField("INTEGER",orderItem.?product.?getProductAttributes()["myinteger"])>0&&MvelHelper.convertField("INTEGER",orderItem.?product.?getProductAttributes()["myinteger"])<10)"
+     *
+     * @param rule the rule to replace
+     * @return a modified version of <b>rule</b>
+     * @see {@link #getRuleAttributeMaps()}
+     */
+    protected static String modifyExpression(String rule, Map<String, Object> ruleParameters, ParserContext context) {
+        String modifiedExpression = rule;
+        for (String attributeMap : getRuleAttributeMaps()) {
+            modifiedExpression = modifiedExpression.replaceAll(attributeMap + "\\(\\)\\[(.*?)\\](?!\\.\\?value)", attributeMap + "().?get($1).?value");
+        }
+        return modifiedExpression;
+    }
+
+    /**
+     * Returns an array of attribute map field names that we need to do replacements for in
+     * {@link #modifyExpression(String, Map, ParserContext)}
+     */
+    protected static String[] getRuleAttributeMaps() {
+        // intentionally left out pricing context getPricingContextAttributes because that's a Map<String, String>
+        return new String[]{ "getProductAttributes",
+            "getCategoryAttributesMap",
+            "getSkuAttributes",
+            "getOrderItemAttributes",
+            "getCustomerAttributes",
+            // Map<String, PageAttribute>
+            "getAdditionalAttributes",
+            // Map<String, AdminUserAttribute>
+            "getAdditionalFields"}; 
     }
 
     /**
@@ -176,7 +249,6 @@ public class MvelHelper {
      * 
      * Should be called from within a valid web request.
      *
-     * @param request
      * @return
      */
     public static Map<String, Object> buildMvelParameters() {
@@ -185,7 +257,7 @@ public class MvelHelper {
         if (brc != null && brc.getRequest() != null) {
            TimeDTO timeDto = new TimeDTO(SystemTime.asCalendar());
             HttpServletRequest request = brc.getRequest();
-            RequestDTO requestDto = (RequestDTO) brc.getRequestDTO();
+            RequestDTO requestDto = brc.getRequestDTO();
             mvelParameters.put("time", timeDto);
             mvelParameters.put("request", requestDto);
 

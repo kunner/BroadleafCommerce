@@ -251,18 +251,22 @@ var BLCAdmin = (function($) {
     	},
     	
     	showMessageAsModal : function(header, message) {
-			if (BLCAdmin.currentModal() != null && BLCAdmin.currentModal().hasClass('loading-modal')) {
-			    BLCAdmin.hideCurrentModal();
-			}
-			
-    	    var $modal = getModalSkeleton();
-    	    
-    	    $modal.find('.modal-header h3').text(header);
-    	    $modal.find('.modal-body').text(message);
-    	    $modal.find('.modal-body').css('padding-bottom', '20px');
-    	    
-            this.showElementAsModal($modal);
+			this.showMessageAsModalWithCallback(header, message);
     	},
+
+		showMessageAsModalWithCallback : function(header, message, onModalHide, onModalHideArgs) {
+			if (BLCAdmin.currentModal() != null && BLCAdmin.currentModal().hasClass('loading-modal')) {
+				BLCAdmin.hideCurrentModal();
+			}
+
+			var $modal = getModalSkeleton();
+
+			$modal.find('.modal-header h3').text(header);
+			$modal.find('.modal-body').text(message);
+			$modal.find('.modal-body').css('padding-bottom', '20px');
+
+			this.showElementAsModal($modal, onModalHide, onModalHideArgs);
+		},
     	
     	showElementAsModal : function($element, onModalHide, onModalHideArgs) {
 			if (BLCAdmin.currentModal() != null && BLCAdmin.currentModal().hasClass('loading-modal')) {
@@ -581,6 +585,74 @@ var BLCAdmin = (function($) {
         
         getDependentFieldFilterHandler : function getDependentFieldFilterHandler(className, childFieldName) {
             return dependentFieldFilterHandlers[getDependentFieldFilterKey(className, childFieldName)];
+        },
+
+        /**
+         * Convenience method to show the action spinner
+         *
+         * @param $actions
+         */
+        showActionSpinner: function showActionSpinner($actions) {
+            $actions.find('button').hide();
+            $actions.find('img.ajax-loader').show();
+        },
+
+        /**
+         * Convenience method to hide the action spinner
+         *
+         */
+        hideActionSpinner : function hideActionSpinner () {
+            var $actions = $('.entity-form-actions');
+            $actions.find('button').show();
+            $actions.find('img.ajax-loader').hide();
+        },
+
+        /**
+         * Convenience method to show errors
+         *
+         * @param data
+         * @param alertMessage
+         */
+        showErrors: function showErrors(data, alertMessage) {
+            var errorBlock = "<div class='errors'></div>";
+            $(errorBlock).insertBefore("form.entity-form div.tabs-container");
+            $.each( data.errors , function( idx, error ){
+                if (error.errorType == "field") {
+                    var fieldLabel = $("#field-" + error.field).find(".field-label");
+
+                    var fieldHtml = "<span class='fieldError error'>SUBSTITUTE</span>";
+                    if ($(".tabError:contains(" + error.tab + ")").length) {
+                        var labeledError = fieldHtml.replace('SUBSTITUTE', (fieldLabel.length > 0 ? fieldLabel[0].innerHTML + ': ' : '') + error.message);
+                        $(".tabError:contains(" + error.tab + ")").append(labeledError);
+                    } else {
+                        var labeledError = "<div class='tabError'><b>" + error.tab +
+                            "</b>" + fieldHtml.replace('SUBSTITUTE', (fieldLabel.length > 0 ? fieldLabel[0].innerHTML + ': ' : '') + error.message) + "</div>";
+                        $(".errors").append(labeledError);
+                    }
+
+                    var fieldError = "<span class='error'>" + error.message + "</span>";
+                    $(fieldError).insertAfter(fieldLabel);
+                } else if (error.errorType == 'global'){
+                    var globalError = "<div class='tabError'><b>" + BLCAdmin.messages.globalErrors + "</b><span class='error'>"
+                        + error.message + "</span></div>";
+                    $(".errors").append(globalError);
+                }
+            });
+            $(".alert-box").removeClass("success").addClass("alert");
+            $(".alert-box-message").text(alertMessage);
+        },
+
+        updateAdminNavigation: function() {
+            // var url = window.location.pathname.replace("/admin", '');
+            BLC.ajax({
+                url: BLC.servletContext + '/update-navigation',
+                type: "GET",
+                error: function (error) {
+                }
+            }, function (data) {
+                var $nav = $('.secondary-nav').parent();
+                $nav.replaceWith($(data));
+            });
         }
 	};
 	
@@ -590,7 +662,9 @@ var BLCAdmin = (function($) {
 // being set on the model instead of a stack trace page when an error occurs on an AJAX request.
 BLC.defaultErrorHandler = function(data) {
     if (data.status == "403") {
-        BLCAdmin.showMessageAsModal(BLCAdmin.messages.error, BLCAdmin.messages.forbidden403);
+		BLCAdmin.showMessageAsModal(BLCAdmin.messages.error, BLCAdmin.messages.forbidden403);
+	} else if (data.status == "409") {
+		BLCAdmin.showMessageAsModal(BLCAdmin.messages.error, BLCAdmin.messages.staleContent);
     } else {
         var $data;
         
@@ -675,6 +749,11 @@ $('body').on('click', '.disabled', function(e) {
 $('body').on('change', 'input.color-picker-value', function() {
     var $this = $(this);
     $this.closest('.field-box').find('input.color-picker').spectrum('set', $this.val());
+});
+
+$('body').on('click', 'button.page-reset', function() {
+	var currentUrl = '//' + location.host + location.pathname;
+	window.location = currentUrl;
 });
 
 /**

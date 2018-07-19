@@ -56,6 +56,12 @@ import org.broadleafcommerce.openadmin.server.domain.PersistencePackageRequest;
 import org.broadleafcommerce.openadmin.server.security.domain.AdminSection;
 import org.broadleafcommerce.openadmin.server.security.remote.EntityOperationType;
 import org.broadleafcommerce.openadmin.server.security.remote.SecurityVerifier;
+import org.broadleafcommerce.openadmin.server.security.service.EntityFormModifier;
+import org.broadleafcommerce.openadmin.server.security.service.EntityFormModifierData;
+import org.broadleafcommerce.openadmin.server.security.service.EntityFormModifierDataPoint;
+import org.broadleafcommerce.openadmin.server.security.service.EntityFormModifierRequest;
+import org.broadleafcommerce.openadmin.server.security.service.ExceptionAwareRowLevelSecurityProvider;
+import org.broadleafcommerce.openadmin.server.security.service.EntityFormModifierConfiguration;
 import org.broadleafcommerce.openadmin.server.security.service.RowLevelSecurityService;
 import org.broadleafcommerce.openadmin.server.security.service.navigation.AdminNavigationService;
 import org.broadleafcommerce.openadmin.server.service.AdminEntityService;
@@ -88,6 +94,7 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -149,7 +156,7 @@ public class FormBuilderServiceImpl implements FormBuilderService {
         List<Field> headerFields = new ArrayList<Field>();
         ListGrid.Type type = ListGrid.Type.MAIN;
         String idProperty = "id";
-
+        
         for (Property p : cmd.getProperties()) {
             if (p.getMetadata() instanceof BasicFieldMetadata) {
                 BasicFieldMetadata fmd = (BasicFieldMetadata) p.getMetadata();
@@ -193,7 +200,7 @@ public class FormBuilderServiceImpl implements FormBuilderService {
         }
         
         hf.withName(p.getName())
-          .withFriendlyName(fmd.getFriendlyName())
+          .withFriendlyName(StringUtils.isNotEmpty(fmd.getFriendlyName()) ? fmd.getFriendlyName() : p.getName())
           .withOrder(fmd.getGridOrder())
           .withColumnWidth(fmd.getColumnWidth())
           .withForeignKeyDisplayValueProperty(fmd.getForeignKeyDisplayValueProperty())
@@ -303,7 +310,7 @@ public class FormBuilderServiceImpl implements FormBuilderService {
 
             Property p2 = cmd.getPMap().get("key");
             BasicFieldMetadata keyMd = (BasicFieldMetadata) p2.getMetadata();
-            keyMd.setFriendlyName("Key");
+            keyMd.setFriendlyName(p2.getMetadata().getFriendlyName());
             Field hf = createHeaderField(p2, keyMd);
             headerFields.add(hf);
             
@@ -395,6 +402,22 @@ public class FormBuilderServiceImpl implements FormBuilderService {
         }
         listGrid.getRowActions().add(DefaultListGridActions.REMOVE);
 
+        //If someone has replaced RowLevelSecurityService, check here to make sure the replacement implements the expected interface
+        if (rowLevelSecurityService instanceof ExceptionAwareRowLevelSecurityProvider) {
+            EntityFormModifierConfiguration entityFormModifierConfiguration = ((ExceptionAwareRowLevelSecurityProvider) rowLevelSecurityService).getUpdateDenialExceptions();
+            for (EntityFormModifierData<EntityFormModifierDataPoint> data : entityFormModifierConfiguration.getData()) {
+                for (EntityFormModifier modifier : entityFormModifierConfiguration.getModifier()) {
+                    if (modifier.isQualified(data.getModifierType())) {
+                        modifier.modifyListGrid(new EntityFormModifierRequest()
+                                .withListGrid(listGrid)
+                                .withConfiguration(data)
+                                .withCurrentUser(adminRemoteSecurityService.getPersistentAdminUser())
+                                .withRowLevelSecurityService(rowLevelSecurityService));
+                    }
+                }
+            }
+        }
+
         return listGrid;
     }
 
@@ -426,6 +449,7 @@ public class FormBuilderServiceImpl implements FormBuilderService {
             ListGridRecord record = new ListGridRecord();
             record.setListGrid(listGrid);
             record.setDirty(e.isDirty());
+            record.setEntity(e);
 
             if (e.findProperty("hasError") != null) {
                 Boolean hasError = Boolean.parseBoolean(e.findProperty("hasError").getValue());
@@ -435,6 +459,15 @@ public class FormBuilderServiceImpl implements FormBuilderService {
                 
                 if (ExtensionResultStatusType.NOT_HANDLED.equals(messageResultStatus)) {
                     record.setErrorKey("listgrid.record.error");
+                }
+            }
+
+            if (e.findProperty("progressStatus") != null) {
+                ExtensionResultStatusType messageResultStatus = listGridErrorExtensionManager
+                        .getProxy().determineStatusMessageForEntity(e, record);
+                if (ExtensionResultStatusType.NOT_HANDLED.equals(messageResultStatus)) {
+                    record.setStatus(e.findProperty("progressStatus").getValue());
+                    record.setStatusCssClass("listgrid.record.status");
                 }
             }
 
@@ -476,6 +509,28 @@ public class FormBuilderServiceImpl implements FormBuilderService {
             extensionManager.getProxy().modifyListGridRecord(className, record, e);
 
             listGrid.getRecords().add(record);
+        }
+
+        if (drs.getFirstId() != null) {
+            listGrid.setFirstId(drs.getFirstId());
+        }
+        if (drs.getLastId() != null) {
+            listGrid.setLastId(drs.getLastId());
+        }
+        if (drs.getUpperCount() != null) {
+            listGrid.setUpperCount(drs.getUpperCount());
+        }
+        if (drs.getLowerCount() != null) {
+            listGrid.setLowerCount(drs.getLowerCount());
+        }
+        if (drs.getFetchType() != null) {
+            listGrid.setFetchType(drs.getFetchType().toString());
+        }
+        if (drs.getTotalCountLessThanPageSize() != null) {
+            listGrid.setTotalCountLessThanPageSize(drs.getTotalCountLessThanPageSize());
+        }
+        if (drs.getPromptSearch() != null) {
+            listGrid.setPromptSearch(drs.getPromptSearch());
         }
 
         return listGrid;
@@ -1016,6 +1071,22 @@ public class FormBuilderServiceImpl implements FormBuilderService {
 
         if (readOnly) {
             entityForm.setReadOnly();
+            //If someone has replaced RowLevelSecurityService, check here to make sure the replacement implements the expected interface
+            if (rowLevelSecurityService instanceof ExceptionAwareRowLevelSecurityProvider) {
+                EntityFormModifierConfiguration entityFormModifierConfiguration = ((ExceptionAwareRowLevelSecurityProvider) rowLevelSecurityService).getUpdateDenialExceptions();
+                for (EntityFormModifierData<EntityFormModifierDataPoint> data : entityFormModifierConfiguration.getData()) {
+                    for (EntityFormModifier modifier : entityFormModifierConfiguration.getModifier()) {
+                        if (modifier.isQualified(data.getModifierType())) {
+                            modifier.modifyEntityForm(new EntityFormModifierRequest()
+                                    .withEntityForm(entityForm)
+                                    .withConfiguration(data)
+                                    .withCurrentUser(adminRemoteSecurityService.getPersistentAdminUser())
+                                    .withEntity(entity)
+                                    .withRowLevelSecurityService(rowLevelSecurityService));
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -1093,15 +1164,15 @@ public class FormBuilderServiceImpl implements FormBuilderService {
 
     @Override
     public EntityForm buildAdornedListForm(AdornedTargetCollectionMetadata adornedMd, AdornedTargetList adornedList,
-            String parentId)
+            String parentId, boolean isViewCollectionItem)
             throws ServiceException {
         EntityForm ef = createStandardEntityForm();
-        return buildAdornedListForm(adornedMd, adornedList, parentId, ef);
+        return buildAdornedListForm(adornedMd, adornedList, parentId, isViewCollectionItem, ef);
     }
     
     @Override
     public EntityForm buildAdornedListForm(AdornedTargetCollectionMetadata adornedMd, AdornedTargetList adornedList,
-            String parentId, EntityForm ef)
+            String parentId, boolean isViewCollectionItem, EntityForm ef)
             throws ServiceException {
         ef.setEntityType(adornedList.getAdornedTargetEntityClassname());
 
@@ -1111,13 +1182,17 @@ public class FormBuilderServiceImpl implements FormBuilderService {
                 .withAdornedList(adornedList);
         ClassMetadata collectionMetadata = adminEntityService.getClassMetadata(request).getDynamicResultSet().getClassMetaData();
 
-        // We want our entity form to only render the maintained adorned target fields
         List<Property> entityFormProperties = new ArrayList<Property>();
-        for (String targetFieldName : adornedMd.getMaintainedAdornedTargetFields()) {
-            Property p = collectionMetadata.getPMap().get(targetFieldName);
-            if (p.getMetadata() instanceof BasicFieldMetadata) {
-                ((BasicFieldMetadata) p.getMetadata()).setVisibility(VisibilityEnum.VISIBLE_ALL);
-                entityFormProperties.add(p);
+        if (isViewCollectionItem) {
+            Collections.addAll(entityFormProperties, collectionMetadata.getProperties());
+        } else {
+            // We want our entity form to only render the maintained adorned target fields
+            for (String targetFieldName : adornedMd.getMaintainedAdornedTargetFields()) {
+                Property p = collectionMetadata.getPMap().get(targetFieldName);
+                if (p.getMetadata() instanceof BasicFieldMetadata) {
+                    ((BasicFieldMetadata) p.getMetadata()).setVisibility(VisibilityEnum.VISIBLE_ALL);
+                    entityFormProperties.add(p);
+                }
             }
         }
 
@@ -1170,7 +1245,7 @@ public class FormBuilderServiceImpl implements FormBuilderService {
             ComboField temp = new ComboField();
             temp.withName("key")
                     .withFieldType("combo_field")
-                    .withFriendlyName("Key");
+                    .withFriendlyName(mapStructure.getKeyPropertyFriendlyName());
             if (mapMd.getKeys() != null) {
                 // The keys can be explicitly set in the annotation...
                 temp.setOptions(mapMd.getKeys());
@@ -1191,7 +1266,7 @@ public class FormBuilderServiceImpl implements FormBuilderService {
         } else {
             keyField = new Field().withName("key")
                                 .withFieldType(SupportedFieldType.STRING.toString())
-                                .withFriendlyName("Key");
+                                .withFriendlyName(mapStructure.getKeyPropertyFriendlyName());
         }
         keyField.setRequired(true);
         ef.addMapKeyField(keyField);
